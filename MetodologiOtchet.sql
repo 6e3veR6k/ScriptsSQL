@@ -2,7 +2,7 @@ use OrantaSch;
 
 declare @BegDate datetime = '09-01-2016';
 declare @EndDate datetime = '09-09-2016';
-declare @BLId int = 7;
+declare @BLId int = 4;
 declare @DogDurationTime int = 15;
 
 
@@ -26,8 +26,9 @@ select
     [OCCount] = (SELECT CASE 
 	WHEN PTOC.ParameterValue = '1' THEN '1'
 	WHEN PTOC.ParameterValue IS NOT NULL THEN (CASE WHEN PPV.Value IS NULL THEN PTOC.ParameterValue ELSE PPV.Value END)
-	END)
-
+	END),
+	[PlannedPayments] = Pay.PlanedValue,
+	[RealPayments] = Pay.RealValue
 
 from
     Products as P
@@ -81,8 +82,36 @@ LEFT JOIN
 	meta.ProgramParameterValues AS PPV
 		ON PTOC.ParameterValue = PPV.gid 							--Ê³ëüê³ñòü ÎÑ
 
+INNER JOIN
+	(SELECT
+		ProgramGID = Payments.ProgramGID,
+		PlanedValue = SUM(Payments.PlanedValue),
+		RealValue = SUM(Payments.RealValue)
+
+	FROM
+		(SELECT
+			[ProgramGID] = PPay.ProgramGID,
+			[PlanedValue] = PPay.Value,
+			[RealValue] = (SELECT SUM(PTR.Value) FROM PlanedToRealPayments AS PTR WHERE PTR.PlanedPaymentGID=PPay.gid AND PTR.Deleted = 0)
+
+		FROM
+			PlanedPayments AS PPay
+
+		INNER JOIN
+			PaymentPeriods AS PPer
+				ON PPer.gid=PPay.PaymentPeriodGID
+					AND PPer.Deleted=0
+	
+		) AS Payments
+	
+	GROUP BY
+		Payments.ProgramGID
+	
+	) AS Pay
+		ON Pay.ProgramGID = Pg.gid
+
 where
     P.BeginingDate between @BegDate and @EndDate
     and P.Deleted = 0
     and P.SupplementaryAgreementTypeGID is NULL
-    
+order by P.PolisNumber    
